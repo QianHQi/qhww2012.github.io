@@ -1,6 +1,6 @@
 
 
-> *[首页](zh-cn/) 
+> *[自我介绍（？](zh-cn/) 
 >
-> *[指南](zh-cn/guide)
+> *[关于MC离线版](zh-cn/guide)
 
