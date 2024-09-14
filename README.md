@@ -8,3 +8,4 @@
 >
 > 😊小码王（xmw）编程[😁浅桦ww](https://world.xiaomawang.com/w/person/project/all/4181489)
 
+​    👍MC游玩地址（在线）https://qhww2012.github.io/#/zh-cn/Scratch/mc-play/MC.html
