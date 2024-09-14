@@ -1,3 +1,7 @@
 \* [首页](zh-cn/) 
 
 *[关于MC离线包](zh-cn/about-mc)
+
+\* [Home](/)
+
+*[Guide](guide.md "The greatest guide in the world")
