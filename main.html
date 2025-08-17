@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>腕上课表 (416×468)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    
+    <!-- 配置Tailwind自定义颜色和字体 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#37C2FF',
+                        subject1: '#FF6B6B',
+                        subject2: '#4ECDC4',
+                        subject3: '#45B7D1',
+                        subject4: '#FFA07A',
+                        subject5: '#98D8C8',
+                        subject6: '#F7DC6F',
+                        subject7: '#A8DADC',
+                        subject8: '#FF8066',
+                        subject9: '#B5EAD7',
+                        danger: '#FF5252',
+                    },
+                    fontFamily: {
+                        sans: ['PingFang SC', 'Helvetica Neue', 'sans-serif']
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .scrollbar-hide {
+                -ms-overflow-style: none;
+                scrollbar-width: none;
+            }
+            .scrollbar-hide::-webkit-scrollbar {
+                display: none;
+            }
+            .card-shadow {
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            }
+            .subject-dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+            }
+            .modal-backdrop {
+                backdrop-filter: blur(2px);
+            }
+            .action-btn {
+                @apply p-1 rounded-full transition-all duration-200;
+            }
+            .slide-delete-btn {
+                @apply absolute right-0 top-0 bottom-0 w-12 bg-danger flex items-center justify-center text-white transform translate-x-full transition-transform duration-300;
+            }
+            .course-card {
+                @apply relative transition-all duration-300 rounded-xl;
+            }
+            .course-options {
+                @apply absolute inset-0 bg-black/50 rounded-xl flex items-center justify-center gap-2 opacity-0 pointer-events-none transition-opacity duration-200;
+            }
+            .course-card:hover .course-options {
+                @apply opacity-100 pointer-events-auto;
+            }
+            .batch-mode-indicator {
+                @apply fixed top-0 left-0 right-0 bg-primary text-white p-1 text-center text-[10px] z-40 transform -translate-y-full transition-transform duration-300;
+            }
+            .batch-mode-indicator.active {
+                @apply transform translate-y-0;
+            }
+            .course-card.selected {
+                @apply ring-2 ring-primary bg-primary/5;
+            }
+            .mobile-nav-item {
+                @apply flex flex-col items-center justify-center flex-1 transition-all duration-200;
+            }
+            .btn-press {
+                transform: scale(0.95);
+            }
+        }
+    </style>
+    
+    <style>
+        /* 强制固定尺寸为416×468 */
+        html, body {
+            width: 416px !important;
+            height: 468px !important;
+            overflow: hidden !important;
+            position: relative !important;
+            margin: 0 auto !important;
+        }
+        
+        /* 在大屏幕上居中显示 */
+        body {
+            box-shadow: 0 0 15px rgba(0,0,0,0.2) !important;
+        }
+        
+        @media (min-width: 417px) {
+            body {
+                margin: 20px auto !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 h-screen w-screen overflow-hidden text-gray-800">
+    <!-- 批量编辑模式指示器 -->
+    <div id="batch-mode-indicator" class="batch-mode-indicator">
+        已选择 <span id="selected-count">0</span> 门课程
+        <div class="flex justify-center gap-1.5 mt-0.5">
+            <button id="batch-delete" class="text-white bg-danger px-1.5 py-0.5 rounded text-[10px]">
+                <i class="fa fa-trash mr-0.5"></i>删除所选
+            </button>
+            <button id="exit-batch-mode" class="text-white bg-gray-600 px-1.5 py-0.5 rounded text-[10px]">
+                取消
+            </button>
+        </div>
+    </div>
+
+    <!-- 主容器 -->
+    <div class="relative h-full flex flex-col">
+        <!-- 页面容器 -->
+        <div class="flex-1 overflow-hidden relative">
+            <!-- 课程表页面 -->
+            <div id="timetable-page" class="h-full flex flex-col">
+                <!-- 顶部标题栏 -->
+                <header class="bg-primary text-white p-3 shadow-sm">
+                    <div class="flex justify-between items-center">
+                        <h1 class="text-lg font-bold">腕上课表</h1>
+                        <div class="flex items-center space-x-2">
+                            <button id="batch-edit-toggle" class="p-1.5 rounded-full hover:bg-primary-700/30 transition">
+                                <i class="fa fa-check-square-o"></i>
+                            </button>
+                            <button id="add-course" class="p-1.5 rounded-full hover:bg-primary-700/30 transition">
+                                <i class="fa fa-plus"></i>
+                            </button>
+                            <button id="edit-subjects" class="p-1.5 rounded-full hover:bg-primary-700/30 transition">
+                                <i class="fa fa-pencil"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 星期指示器 -->
+                    <div class="flex justify-between mt-2 overflow-x-auto scrollbar-hide pb-1">
+                        <div class="day-indicator min-w-[38px] text-center text-[11px]" data-day="0">周一</div>
+                        <div class="day-indicator min-w-[38px] text-center text-[11px]" data-day="1">周二</div>
+                        <div class="day-indicator min-w-[38px] text-center text-[11px]" data-day="2">周三</div>
+                        <div class="day-indicator min-w-[38px] text-center text-[11px]" data-day="3">周四</div>
+                        <div class="day-indicator min-w-[38px] text-center text-[11px]" data-day="4">周五</div>
+                        <div class="day-indicator min-w-[38px] text-center text-[11px] text-gray-300" data-day="5">周六</div>
+                        <div class="day-indicator min-w-[38px] text-center text-[11px] text-gray-300" data-day="6">周日</div>
+                    </div>
+                </header>
+                
+                <!-- 快速添加按钮 -->
+                <button id="quick-add-course" class="fixed bottom-16 right-4 bg-primary text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center z-30 hover:bg-primary/90 transition-all duration-300 transform hover:scale-110">
+                    <i class="fa fa-plus"></i>
+                </button>
+                
+                <!-- 课程卡片容器 -->
+                <div class="flex-1 overflow-hidden relative">
+                    <div id="days-container" class="h-full flex transition-transform duration-300 ease-out">
+                        <!-- 周一 -->
+                        <div class="day-card min-w-full h-full p-2 overflow-y-auto scrollbar-hide" data-day="0">
+                            <div class="space-y-2.5" id="day-0-courses">
+                                <div class="text-xs text-gray-500 mt-1 mb-1">上午</div>
+                                
+                                <div class="bg-white rounded-xl p-3 card-shadow border-l-4 border-subject1 course-card" data-course-id="0-1">
+                                    <div class="slide-delete-btn" data-course-id="0-1">
+                                        <i class="fa fa-trash"></i>
+                                    </div>
+                                    
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <h3 class="font-bold subject-name text-sm" data-subject="1">语文</h3>
+                                            <p class="text-xs text-gray-500 mt-0.5">08:00 - 08:45</p>
+                                        </div>
+                                        <i class="fa fa-angle-right text-gray-300"></i>
+                                    </div>
+                                    <div class="flex justify-between items-center mt-2">
+                                        <p class="text-xs text-gray-600"><i class="fa fa-user-o mr-1"></i>王老师</p>
+                                        <p class="text-xs text-gray-600"><i class="fa fa-map-marker mr-1"></i>高一(1)班</p>
+                                    </div>
+                                    
+                                    <div class="course-options">
+                                        <button class="action-btn edit-course bg-white text-primary rounded-full w-8 h-8 flex items-center justify-center" data-course-id="0-1">
+                                            <i class="fa fa-pencil"></i>
+                                        </button>
+                                        <button class="action-btn delete-course bg-white text-danger rounded-full w-8 h-8 flex items-center justify-center" data-course-id="0-1">
+                                            <i class="fa fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="bg-white rounded-xl p-3 card-shadow border-l-4 border-subject2 course-card" data-course-id="0-2">
+                                    <div class="slide-delete-btn" data-course-id="0-2">
+                                        <i class="fa fa-trash"></i>
+                                    </div>
+                                    
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <h3 class="font-bold subject-name text-sm" data-subject="2">数学</h3>
+                                            <p class="text-xs text-gray-500 mt-0.5">08:55 - 09:40</p>
+                                        </div>
+                                        <i class="fa fa-angle-right text-gray-300"></i>
+                                    </div>
+                                    <div class="flex justify-between items-center mt-2">
+                                        <p class="text-xs text-gray-600"><i class="fa fa-user-o mr-1"></i>李老师</p>
+                                        <p class="text-xs text-gray-600"><i class="fa fa-map-marker mr-1"></i>高一(1)班</p>
+                                    </div>
+                                    
+                                    <div class="course-options">
+                                        <button class="action-btn edit-course bg-white text-primary rounded-full w-8 h-8 flex items-center justify-center" data-course-id="0-2">
+                                            <i class="fa fa-pencil"></i>
+                                        </button>
+                                        <button class="action-btn delete-course bg-white text-danger rounded-full w-8 h-8 flex items-center justify-center" data-course-id="0-2">
+                                            <i class="fa fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex items-center justify-center my-1">
+                                    <div class="h-px bg-gray-200 flex-1"></div>
+                                    <span class="text-[10px] text-gray-400 px-2">课间休息</span>
+                                    <div class="h-px bg-gray-200 flex-1"></div>
+                                </div>
+                                
+                                <div class="bg-white rounded-xl p-3 card-shadow border-l-4 border-subject3 course-card" data-course-id="0-3">
+                                    <div class="slide-delete-btn" data-course-id="0-3">
+                                        <i class="fa fa-trash"></i>
+                                    </div>
+                                    
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <h3 class="font-bold subject-name text-sm" data-subject="3">英语</h3>
+                                            <p class="text-xs text-gray-500 mt-0.5">10:00 - 10:45</p>
+                                        </div>
+                                        <i class="fa fa-angle-right text-gray-300"></i>
+                                    </div>
+                                    <div class="flex justify-between items-center mt-2">
+                                        <p class="text-xs text-gray-600"><i class="fa fa-user-o mr-1"></i>张老师</p>
+                                        <p class="text-xs text-gray-600"><i class="fa fa-map-marker mr-1"></i>语音室</p>
+                                    </div>
+                                    
+                                    <div class="course-options">
+                                        <button class="action-btn edit-course bg-white text-primary rounded-full w-8 h-8 flex items-center justify-center" data-course-id="0-3">
+                                            <i class="fa fa-pencil"></i>
+                                        </button>
+                                        <button class="action-btn delete-course bg-white text-danger rounded-full w-8 h-8 flex items-center justify-center" data-course-id="0-3">
+                                            <i class="fa fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="bg-white rounded-xl p-3 card-shadow border-l-4 border-subject4 course-card" data-course-id="0-4">
+                                    <div class="slide-delete-btn" data-course-id="0-4">
+                                        <i class="fa fa-trash"></i>
+                                    </div>
+                                    
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <h3 class="font-bold subject-name text-sm" data-subject="4">物理</h3>
+                                            <p class="text-xs text-gray-500 mt-0.5">10:55 - 11:40</p>
+                                        </div>
+                                        <i class="fa fa-angle-right text-gray-300"></i>
+                                    </div>
+                                    <div class="flex justify-between items-center mt-2">
+                                        <p class="text-xs text-gray-600"><i class="fa fa-user-o mr-1"></i>赵老师</p>
+                                        <p class="text-xs text-gray-600"><i class="fa fa-map-marker mr-1"></i>物理实验室</p>
+                                    </div>
+                                    
+                                    <div class="course-options">
+                                        <button class="action-btn edit-course bg-white text-primary rounded-full w-8 h-8 flex items-center justify-center" data-course-id="0-4">
+                                            <i class="fa fa-pencil"></i>
+                                        </button>
+                                        <button class="action-btn delete-course bg-white text-danger rounded-full w-8 h-8 flex items-center justify-center" data-course-id="0-4">
+                                            <i class="fa fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="text-xs text-gray-500 mt-2 mb-1">下午</div>
+                                
+                                <div class="bg-white rounded-xl p-3 card-shadow border-l-4 border-subject5 course-card" data-course-id="0-5">
+                                    <div class="slide-delete-btn" data-course-id="0-5">
+                                        <i class="fa fa-trash"></i>
+                                    </div>
+                                    
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <h3 class="font-bold subject-name text-sm" data-subject="5">化学</h3>
+                                            <p class="text-xs text-gray-500 mt-0.5">14:00 - 14:45</p>
+                                        </div>
+                                        <i class="fa fa-angle-right text-gray-300"></i>
+                                    </div>
+                                    <div class="flex justify-between items-center mt-2">
+                                        <p class="text-xs text-gray-600"><i class="fa fa-user-o mr-1"></i>陈老师</p>
+                                        <p class="text-xs text-gray-600"><i class="fa fa-map-marker mr-1"></i>化学实验室</p>
+                                    </div>
+                                    
+                                    <div class="course-options">
+                                        <button class="action-btn edit-course bg-white text-primary rounded-full w-8 h-8 flex items-center justify-center" data-course-id="0-5">
+                                            <i class="fa fa-pencil"></i>
+                                        </button>
+                                        <button class="action-btn delete-course bg-white text-danger rounded-full w-8 h-8 flex items-center justify-center" data-course-id="0-5">
+                                            <i class="fa fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 周二到周日的内容结构与周一类似 -->
+                        <div class="day-card min-w-full h-full p-2 overflow-y-auto scrollbar-hide" data-day="1">
+                            <div class="space-y-2.5" id="day-1-courses">
+                                <div class="text-xs text-gray-500 mt-1 mb-1">上午</div>
+                                
+                                <div class="bg-white rounded-xl p-3 card-shadow border-l-4 border-subject2 course-card" data-course-id="1-1">
+                                    <div class="slide-delete-btn" data-course-id="1-1">
+                                        <i class="fa fa-trash"></i>
+                                    </div>
+                                    
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <h3 class="font-bold subject-name text-sm" data-subject="2">数学</h3>
+                                            <p class="text-xs text-gray-500 mt-0.5">08:00 - 08:45</p>
+                                        </div>
+                                        <i class="fa fa-angle-right text-gray-300"></i>
+                                    </div>
+                                    <div class="flex justify-between items-center mt-2">
+                                        <p class="text-xs text-gray-600"><i class="fa fa-user-o mr-1"></i>李老师</p>
+                                        <p class="text-xs text-gray-600"><i class="fa fa-map-marker mr-1"></i>高一(1)班</p>
+                                    </div>
+                                    
+                                    <div class="course-options">
+                                        <button class="action-btn edit-course bg-white text-primary rounded-full w-8 h-8 flex items-center justify-center" data-course-id="1-1">
+                                            <i class="fa fa-pencil"></i>
+                                        </button>
+                                        <button class="action-btn delete-course bg-white text-danger rounded-full w-8 h-8 flex items-center justify-center" data-course-id="1-1">
+                                            <i class="fa fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 其他日期 -->
+                        <div class="day-card min-w-full h-full p-2 overflow-y-auto scrollbar-hide" data-day="2">
+                            <div class="space-y-2.5" id="day-2-courses">
+                                <div class="flex flex-col items-center justify-center h-full p-6">
+                                    <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                                        <i class="fa fa-plus text-gray-400"></i>
+                                    </div>
+                                    <p class="text-gray-500 text-sm">添加周三的课程</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="day-card min-w-full h-full p-2 overflow-y-auto scrollbar-hide" data-day="3">
+                            <div class="space-y-2.5" id="day-3-courses">
+                                <div class="flex flex-col items-center justify-center h-full p-6">
+                                    <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                                        <i class="fa fa-plus text-gray-400"></i>
+                                    </div>
+                                    <p class="text-gray-500 text-sm">添加周四的课程</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="day-card min-w-full h-full p-2 overflow-y-auto scrollbar-hide" data-day="4">
+                            <div class="space-y-2.5" id="day-4-courses">
+                                <div class="flex flex-col items-center justify-center h-full p-6">
+                                    <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                                        <i class="fa fa-plus text-gray-400"></i>
+                                    </div>
+                                    <p class="text-gray-500 text-sm">添加周五的课程</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="day-card min-w-full h-full p-2 overflow-y-auto scrollbar-hide" data-day="5">
+                            <div class="space-y-2.5" id="day-5-courses">
+                                <div class="flex flex-col items-center justify-center h-full p-6">
+                                    <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                                        <i class="fa fa-plus text-gray-400"></i>
+                                    </div>
+                                    <p class="text-gray-500 text-sm">添加周六的课程</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="day-card min-w-full h-full p-2 overflow-y-auto scrollbar-hide" data-day="6">
+                            <div class="space-y-2.5" id="day-6-courses">
+                                <div class="flex flex-col items-center justify-center h-full p-6">
+                                    <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                                        <i class="fa fa-plus text-gray-400"></i>
+                                    </div>
+                                    <p class="text-gray-500 text-sm">添加周日的课程</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 关于APP页面 -->
+            <div id="about-page" class="h-full flex flex-col hidden">
+                <header class="bg-primary text-white p-3 shadow-sm">
+                    <div class="flex items-center">
+                        <button id="back-from-about" class="mr-2">
+                            <i class="fa fa-angle-left"></i>
+                        </button>
+                        <h1 class="text-lg font-bold">关于腕上课表</h1>
+                    </div>
+                </header>
+                
+                <div class="flex-1 overflow-y-auto p-4 space-y-4 bg-white">
+                    <div class="text-center">
+                        <div class="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
+                            <i class="fa fa-graduation-cap text-2xl text-primary"></i>
+                        </div>
+                        <h2 class="text-base font-bold mt-3">腕上课表</h2>
+                        <p class="text-gray-500 text-xs mt-1">Stable 1.0.0</p>
+                    </div>
+                    
+                    <div class="bg-gray-50 rounded-xl p-3">
+                        <h3 class="font-bold text-sm mb-2 flex items-center">
+                            <i class="fa fa-info-circle text-primary mr-2"></i>应用介绍
+                        </h3>
+                        <p class="text-xs text-gray-600 leading-relaxed">
+                            腕上课表是一款简洁实用的课程管理工具，专为学生设计。
+                            您可以轻松添加、编辑和删除课程，按星期查看每日课程安排，
+                            帮助您高效管理学习时间，不错过任何一节课。界面简洁直观，
+                            操作便捷，让课程管理变得轻松简单。
+                        </p>
+                    </div>
+                    
+                    <div class="bg-gray-50 rounded-xl p-3">
+                        <h3 class="font-bold text-sm mb-2 flex items-center">
+                            <i class="fa fa-envelope-o text-primary mr-2"></i>意见反馈
+                        </h3>
+                        <p class="text-xs text-gray-600">
+                            如有任何建议或问题，请发送邮件至：
+                            <a href="mailto:vmeggy@outlook.com" class="text-primary underline">vmeggy@outlook.com</a>
+                        </p>
+                    </div>
+                    
+                    <div class="bg-gray-50 rounded-xl p-3">
+                        <h3 class="font-bold text-sm mb-2 flex items-center">
+                            <i class="fa fa-lightbulb-o text-primary mr-2"></i>使用技巧
+                        </h3>
+                        <ul class="text-xs text-gray-600 space-y-2">
+                            <li class="flex items-start">
+                                <i class="fa fa-check-circle text-primary mt-0.5 mr-2"></i>
+                                <span>长按课程卡片可快速编辑或删除</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fa fa-check-circle text-primary mt-0.5 mr-2"></i>
+                                <span>向右滑动课程卡片可直接删除</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fa fa-check-circle text-primary mt-0.5 mr-2"></i>
+                                <span>点击右上角复选框图标可进入批量编辑模式</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fa fa-check-circle text-primary mt-0.5 mr-2"></i>
+                                <span>右下角"+"按钮可快速添加课程</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 底部导航栏 -->
+        <footer class="bg-white border-t border-gray-100 py-1 px-4 shadow-[0_-1px_3px_rgba(0,0,0,0.03)]">
+            <div class="flex h-14">
+                <button id="nav-timetable" class="mobile-nav-item text-primary">
+                    <i class="fa fa-calendar text-lg"></i>
+                    <span class="text-xs mt-1">课程表</span>
+                </button>
+                <button id="nav-about" class="mobile-nav-item text-gray-500">
+                    <i class="fa fa-info-circle text-lg"></i>
+                    <span class="text-xs mt-1">关于</span>
+                </button>
+            </div>
+        </footer>
+    </div>
+
+    <!-- 课程名称编辑弹窗 -->
+    <div id="edit-subjects-modal" class="fixed inset-0 bg-black/50 modal-backdrop flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl w-[90%] max-w-xs p-4 shadow-xl transform transition-all duration-300 scale-95 opacity-0" id="modal-content">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-base font-bold text-primary">编辑课程名称</h2>
+                <button id="close-modal" class="text-gray-500 hover:text-gray-700 p-1">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-3 max-h-[220px] overflow-y-auto scrollbar-hide pr-1">
+                <div class="flex items-center space-x-2.5 p-2 bg-gray-50 rounded-lg">
+                    <div class="subject-dot bg-subject1"></div>
+                    <input type="text" id="subject1-input" class="flex-1 border border-gray-200 rounded px-2 py-1.5 text-sm bg-white" placeholder="课程名称">
+                </div>
+                <div class="flex items-center space-x-2.5 p-2 bg-gray-50 rounded-lg">
+                    <div class="subject-dot bg-subject2"></div>
+                    <input type="text" id="subject2-input" class="flex-1 border border-gray-200 rounded px-2 py-1.5 text-sm bg-white" placeholder="课程名称">
+                </div>
+                <div class="flex items-center space-x-2.5 p-2 bg-gray-50 rounded-lg">
+                    <div class="subject-dot bg-subject3"></div>
+                    <input type="text" id="subject3-input" class="flex-1 border border-gray-200 rounded px-2 py-1.5 text-sm bg-white" placeholder="课程名称">
+                </div>
+                <div class="flex items-center space-x-2.5 p-2 bg-gray-50 rounded-lg">
+                    <div class="subject-dot bg-subject4"></div>
+                    <input type="text" id="subject4-input" class="flex-1 border border-gray-200 rounded px-2 py-1.5 text-sm bg-white" placeholder="课程名称">
+                </div>
+                <div class="flex items-center space-x-2.5 p-2 bg-gray-50 rounded-lg">
+                    <div class="subject-dot bg-subject5"></div>
+                    <input type="text" id="subject5-input" class="flex-1 border border-gray-200 rounded px-2 py-1.5 text-sm bg-white" placeholder="课程名称">
+                </div>
+                <div class="flex items-center space-x-2.5 p-2 bg-gray-50 rounded-lg">
+                    <div class="subject-dot bg-subject6"></div>
+                    <input type="text" id="subject6-input" class="flex-1 border border-gray-200 rounded px-2 py-1.5 text-sm bg-white" placeholder="课程名称">
+                </div>
+                <div class="flex items-center space-x-2.5 p-2 bg-gray-50 rounded-lg">
+                    <div class="subject-dot bg-subject7"></div>
+                    <input type="text" id="subject7-input" class="flex-1 border border-gray-200 rounded px-2 py-1.5 text-sm bg-white" placeholder="课程名称">
+                </div>
+                <div class="flex items-center space-x-2.5 p-2 bg-gray-50 rounded-lg">
+                    <div class="subject-dot bg-subject8"></div>
+                    <input type="text" id="subject8-input" class="flex-1 border border-gray-200 rounded px-2 py-1.5 text-sm bg-white" placeholder="课程名称">
+                </div>
+                <div class="flex items-center space-x-2.5 p-2 bg-gray-50 rounded-lg">
+                    <div class="subject-dot bg-subject9"></div>
+                    <input type="text" id="subject9-input" class="flex-1 border border-gray-200 rounded px-2 py-1.5 text-sm bg-white" placeholder="课程名称">
+                </div>
+            </div>
+            
+            <div class="mt-4 flex justify-end space-x-3">
+                <button id="cancel-edit" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">取消</button>
+                <button id="save-edit" class="px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary/90">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 课程编辑弹窗 -->
+    <div id="edit-course-modal" class="fixed inset-0 bg-black/50 modal-backdrop flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl w-[90%] max-w-xs p-4 shadow-xl transform transition-all duration-300 scale-95 opacity-0" id="course-modal-content">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-base font-bold text-primary" id="edit-course-title">编辑课程</h2>
+                <button class="close-course-modal text-gray-500 hover:text-gray-700 p-1">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-3 max-h-[250px] overflow-y-auto scrollbar-hide pr-1">
+                <input type="hidden" id="current-course-id">
+                
+                <div>
+                    <label class="text-xs text-gray-500 block mb-1">课程类型</label>
+                    <select id="course-subject" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                        <option value="1">语文</option>
+                        <option value="2">数学</option>
+                        <option value="3">英语</option>
+                        <option value="4">物理</option>
+                        <option value="5">化学</option>
+                        <option value="6">生物</option>
+                        <option value="7">历史</option>
+                        <option value="8">地理</option>
+                        <option value="9">政治</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="text-xs text-gray-500 block mb-1">时间段</label>
+                    <div class="flex space-x-2">
+                        <input type="time" id="course-start-time" class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                        <span class="flex items-center text-gray-400">-</span>
+                        <input type="time" id="course-end-time" class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="text-xs text-gray-500 block mb-1">教师</label>
+                    <input type="text" id="course-teacher" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white" placeholder="教师姓名">
+                </div>
+                
+                <div>
+                    <label class="text-xs text-gray-500 block mb-1">教室</label>
+                    <input type="text" id="course-classroom" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white" placeholder="教室位置">
+                </div>
+            </div>
+            
+            <div class="mt-4 flex justify-end space-x-3">
+                <button class="cancel-course-edit px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">取消</button>
+                <button id="save-course-edit" class="px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary/90">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 删除确认弹窗 -->
+    <div id="delete-confirm-modal" class="fixed inset-0 bg-black/50 modal-backdrop flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl w-[80%] max-w-xs p-4 shadow-xl transform transition-all duration-300 scale-95 opacity-0" id="delete-modal-content">
+            <div class="text-center mb-3">
+                <div class="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <i class="fa fa-trash text-danger"></i>
+                </div>
+                <h2 class="text-base font-bold">确认删除</h2>
+            </div>
+            <p class="text-xs text-gray-600 text-center mb-4">您确定要删除这门课程吗？此操作无法撤销。</p>
+            
+            <input type="hidden" id="delete-course-id">
+            
+            <div class="flex justify-center space-x-3">
+                <button id="cancel-delete" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">取消</button>
+                <button id="confirm-delete" class="px-4 py-2 bg-danger text-white rounded-lg text-sm hover:bg-danger/90">删除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 操作成功提示 -->
+    <div id="toast-notification" class="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-dark/80 text-white px-4 py-2 rounded-full shadow-lg opacity-0 pointer-events-none transition-all duration-300 z-50 text-sm">
+        操作成功
+    </div>
+
+    <script>
+        // 当前显示的星期（0-6 对应周一到周日）
+        let currentDay = 0;
+        const totalDays = 7;
+        let batchMode = false;
+        let selectedCourses = new Set();
+        
+        // 存储课程名称的对象
+        let subjectNames = {
+            1: '语文',
+            2: '数学',
+            3: '英语',
+            4: '物理',
+            5: '化学',
+            6: '生物',
+            7: '历史',
+            8: '地理',
+            9: '政治'
+        };
+        
+        // DOM 元素
+        const daysContainer = document.getElementById('days-container');
+        const dayIndicators = document.querySelectorAll('.day-indicator');
+        const timetablePage = document.getElementById('timetable-page');
+        const aboutPage = document.getElementById('about-page');
+        const navTimetable = document.getElementById('nav-timetable');
+        const navAbout = document.getElementById('nav-about');
+        const backFromAbout = document.getElementById('back-from-about');
+        const editSubjectsBtn = document.getElementById('edit-subjects');
+        const editSubjectsModal = document.getElementById('edit-subjects-modal');
+        const closeModalBtn = document.getElementById('close-modal');
+        const cancelEditBtn = document.getElementById('cancel-edit');
+        const saveEditBtn = document.getElementById('save-edit');
+        const addCourseBtn = document.getElementById('add-course');
+        const quickAddCourseBtn = document.getElementById('quick-add-course');
+        const batchEditToggle = document.getElementById('batch-edit-toggle');
+        const batchModeIndicator = document.getElementById('batch-mode-indicator');
+        const selectedCountEl = document.getElementById('selected-count');
+        const batchDeleteBtn = document.getElementById('batch-delete');
+        const exitBatchModeBtn = document.getElementById('exit-batch-mode');
+        const toastNotification = document.getElementById('toast-notification');
+        
+        // 课程编辑相关元素
+        const editCourseModal = document.getElementById('edit-course-modal');
+        const saveCourseEditBtn = document.getElementById('save-course-edit');
+        const modalContent = document.getElementById('modal-content');
+        const courseModalContent = document.getElementById('course-modal-content');
+        const deleteModalContent = document.getElementById('delete-modal-content');
+        
+        // 删除确认相关元素
+        const deleteConfirmModal = document.getElementById('delete-confirm-modal');
+        const cancelDeleteBtn = document.getElementById('cancel-delete');
+        const confirmDeleteBtn = document.getElementById('confirm-delete');
+        
+        // 显示提示消息
+        function showToast(message) {
+            toastNotification.textContent = message;
+            toastNotification.classList.remove('opacity-0', 'translate-y-4');
+            toastNotification.classList.add('opacity-100', 'translate-y-0');
+            
+            setTimeout(() => {
+                toastNotification.classList.remove('opacity-100', 'translate-y-0');
+                toastNotification.classList.add('opacity-0', 'translate-y-4');
+            }, 2000);
+        }
+        
+        // 按钮点击反馈
+        function addButtonPressEffect(button) {
+            button.classList.add('btn-press');
+            setTimeout(() => button.classList.remove('btn-press'), 200);
+        }
+        
+        // 打开弹窗带动画
+        function openModal(modal, content) {
+            modal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+                content.classList.add('scale-100', 'opacity-100');
+            }, 10);
+        }
+        
+        // 关闭弹窗带动画
+        function closeModal(modal, content) {
+            content.classList.remove('scale-100', 'opacity-100');
+            content.classList.add('scale-95', 'opacity-0');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                document.body.style.overflow = '';
+            }, 300);
+        }
+        
+        // 更新日期显示
+        function updateDayDisplay() {
+            daysContainer.style.transform = `translateX(-${currentDay * 100}%)`;
+            
+            dayIndicators.forEach((indicator, index) => {
+                if (index === currentDay) {
+                    indicator.classList.add('font-bold', 'text-white', 'bg-primary/80', 'rounded-full', 'py-0.5');
+                } else {
+                    indicator.classList.remove('font-bold', 'text-white', 'bg-primary/80', 'rounded-full', 'py-0.5');
+                }
+            });
+        }
+        
+        // 更新所有课程名称显示
+        function updateSubjectNames() {
+            document.querySelectorAll('.subject-name').forEach(element => {
+                const subjectId = element.getAttribute('data-subject');
+                if (subjectNames[subjectId]) {
+                    element.textContent = subjectNames[subjectId];
+                }
+            });
+            
+            const courseSubjectSelect = document.getElementById('course-subject');
+            courseSubjectSelect.innerHTML = '';
+            for (let i = 1; i <= 9; i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = subjectNames[i] || `课程${i}`;
+                courseSubjectSelect.appendChild(option);
+            }
+        }
+        
+        // 打开编辑课程名称弹窗
+        function openEditModal() {
+            for (let i = 1; i <= 9; i++) {
+                const input = document.getElementById(`subject${i}-input`);
+                if (input && subjectNames[i]) {
+                    input.value = subjectNames[i];
+                }
+            }
+            
+            openModal(editSubjectsModal, modalContent);
+        }
+        
+        // 关闭编辑课程名称弹窗
+        function closeEditModal() {
+            closeModal(editSubjectsModal, modalContent);
+        }
+        
+        // 保存课程名称修改
+        function saveSubjectNames() {
+            addButtonPressEffect(saveEditBtn);
+            
+            for (let i = 1; i <= 9; i++) {
+                const input = document.getElementById(`subject${i}-input`);
+                if (input && input.value.trim() !== '') {
+                    subjectNames[i] = input.value.trim();
+                }
+            }
+            
+            updateSubjectNames();
+            closeEditModal();
+            showToast('课程名称已更新');
+        }
+        
+        // 打开课程编辑弹窗
+        function openCourseEditModal(courseId = null) {
+            const currentCourseIdInput = document.getElementById('current-course-id');
+            const courseSubjectSelect = document.getElementById('course-subject');
+            const courseStartTimeInput = document.getElementById('course-start-time');
+            const courseEndTimeInput = document.getElementById('course-end-time');
+            const courseTeacherInput = document.getElementById('course-teacher');
+            const courseClassroomInput = document.getElementById('course-classroom');
+            const editCourseTitle = document.getElementById('edit-course-title');
+            
+            currentCourseIdInput.value = '';
+            courseSubjectSelect.value = '1';
+            courseStartTimeInput.value = '';
+            courseEndTimeInput.value = '';
+            courseTeacherInput.value = '';
+            courseClassroomInput.value = '';
+            
+            if (courseId) {
+                editCourseTitle.textContent = '编辑课程';
+                currentCourseIdInput.value = courseId;
+                
+                const courseElement = document.querySelector(`[data-course-id="${courseId}"]`);
+                if (courseElement) {
+                    const subjectId = courseElement.querySelector('.subject-name').getAttribute('data-subject');
+                    const timeText = courseElement.querySelector('.text-gray-500').textContent;
+                    const [startTime, endTime] = timeText.split(' - ');
+                    const teacherText = courseElement.querySelectorAll('p')[0].textContent;
+                    const classroomText = courseElement.querySelectorAll('p')[1].textContent;
+                    const teacher = teacherText.replace(/<i class="fa fa-user-o mr-1"><\/i>/, '');
+                    const classroom = classroomText.replace(/<i class="fa fa-map-marker mr-1"><\/i>/, '');
+                    
+                    courseSubjectSelect.value = subjectId;
+                    courseStartTimeInput.value = startTime;
+                    courseEndTimeInput.value = endTime;
+                    courseTeacherInput.value = teacher;
+                    courseClassroomInput.value = classroom;
+                }
+            } else {
+                editCourseTitle.textContent = '添加课程';
+                currentCourseIdInput.value = `new-${currentDay}`;
+                courseStartTimeInput.value = '08:00';
+                courseEndTimeInput.value = '08:45';
+            }
+            
+            openModal(editCourseModal, courseModalContent);
+        }
+        
+        // 关闭课程编辑弹窗
+        function closeCourseEditModal() {
+            closeModal(editCourseModal, courseModalContent);
+        }
+        
+        // 保存课程编辑
+        function saveCourseEdit() {
+            addButtonPressEffect(saveCourseEditBtn);
+            
+            const courseId = document.getElementById('current-course-id').value;
+            const subjectId = document.getElementById('course-subject').value;
+            const startTime = document.getElementById('course-start-time').value;
+            const endTime = document.getElementById('course-end-time').value;
+            const teacher = document.getElementById('course-teacher').value;
+            const classroom = document.getElementById('course-classroom').value;
+            
+            if (!startTime || !endTime || !teacher || !classroom) {
+                showToast('请填写完整的课程信息');
+                return;
+            }
+            
+            if (courseId.startsWith('new-')) {
+                const dayId = courseId.split('-')[1];
+                const coursesContainer = document.getElementById(`day-${dayId}-courses`);
+                
+                // 检查是否是空白状态，如果是则清空
+                const noCourseText = coursesContainer.querySelector('.text-gray-500');
+                if (noCourseText) {
+                    coursesContainer.innerHTML = '';
+                    // 添加时间段标题（默认上午）
+                    const timeHeader = document.createElement('div');
+                    timeHeader.className = 'text-xs text-gray-500 mt-1 mb-1';
+                    timeHeader.textContent = '上午';
+                    coursesContainer.appendChild(timeHeader);
+                }
+                
+                const courseCount = coursesContainer.querySelectorAll('.course-card').length;
+                const newCourseId = `${dayId}-${courseCount + 1}`;
+                
+                const courseElement = document.createElement('div');
+                courseElement.className = `bg-white rounded-xl p-3 card-shadow border-l-4 border-subject${subjectId} course-card`;
+                courseElement.setAttribute('data-course-id', newCourseId);
+                
+                courseElement.innerHTML = `
+                    <div class="slide-delete-btn" data-course-id="${newCourseId}">
+                        <i class="fa fa-trash"></i>
+                    </div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="font-bold subject-name text-sm" data-subject="${subjectId}">${subjectNames[subjectId]}</h3>
+                            <p class="text-xs text-gray-500 mt-0.5">${startTime} - ${endTime}</p>
+                        </div>
+                        <i class="fa fa-angle-right text-gray-300"></i>
+                    </div>
+                    <div class="flex justify-between items-center mt-2">
+                        <p class="text-xs text-gray-600"><i class="fa fa-user-o mr-1"></i>${teacher}</p>
+                        <p class="text-xs text-gray-600"><i class="fa fa-map-marker mr-1"></i>${classroom}</p>
+                    </div>
+                    <div class="course-options">
+                        <button class="action-btn edit-course bg-white text-primary rounded-full w-8 h-8 flex items-center justify-center" data-course-id="${newCourseId}">
+                            <i class="fa fa-pencil"></i>
+                        </button>
+                        <button class="action-btn delete-course bg-white text-danger rounded-full w-8 h-8 flex items-center justify-center" data-course-id="${newCourseId}">
+                            <i class="fa fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+                
+                coursesContainer.appendChild(courseElement);
+                bindCourseActions(courseElement);
+                bindSwipeActions(courseElement);
+                bindLongPressActions(courseElement);
+                
+                showToast('课程已添加');
+            } else {
+                const courseElement = document.querySelector(`[data-course-id="${courseId}"]`);
+                if (courseElement) {
+                    courseElement.className = `bg-white rounded-xl p-3 card-shadow border-l-4 border-subject${subjectId} course-card`;
+                    courseElement.querySelector('.subject-name').setAttribute('data-subject', subjectId);
+                    courseElement.querySelector('.subject-name').textContent = subjectNames[subjectId];
+                    courseElement.querySelector('.text-gray-500').textContent = `${startTime} - ${endTime}`;
+                    courseElement.querySelectorAll('p')[0].innerHTML = `<i class="fa fa-user-o mr-1"></i>${teacher}`;
+                    courseElement.querySelectorAll('p')[1].innerHTML = `<i class="fa fa-map-marker mr-1"></i>${classroom}`;
+                    
+                    showToast('课程已更新');
+                }
+            }
+            
+            closeCourseEditModal();
+        }
+        
+        // 打开删除确认弹窗
+        function openDeleteConfirmModal(courseId) {
+            document.getElementById('delete-course-id').value = courseId;
+            openModal(deleteConfirmModal, deleteModalContent);
+        }
+        
+        // 关闭删除确认弹窗
+        function closeDeleteConfirmModal() {
+            closeModal(deleteConfirmModal, deleteModalContent);
+        }
+        
+        // 确认删除课程
+        function confirmDeleteCourse() {
+            addButtonPressEffect(confirmDeleteBtn);
+            
+            const courseId = document.getElementById('delete-course-id').value;
+            const courseElement = document.querySelector(`[data-course-id="${courseId}"]`);
+            
+            if (courseElement) {
+                const dayContainer = courseElement.closest('.day-card');
+                const dayId = dayContainer.getAttribute('data-day');
+                const coursesContainer = document.getElementById(`day-${dayId}-courses`);
+                
+                // 添加删除动画
+                courseElement.classList.add('opacity-0', 'transform', 'scale-95');
+                setTimeout(() => {
+                    courseElement.remove();
+                    
+                    // 检查是否还有课程
+                    const remainingCourses = coursesContainer.querySelectorAll('.course-card').length;
+                    if (remainingCourses === 0) {
+                        coursesContainer.innerHTML = `
+                            <div class="flex flex-col items-center justify-center h-full p-6">
+                                <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                                    <i class="fa fa-plus text-gray-400"></i>
+                                </div>
+                                <p class="text-gray-500 text-sm">今天没有课程</p>
+                            </div>
+                        `;
+                    }
+                    
+                    // 如果在批量模式中，更新选择状态
+                    if (batchMode && selectedCourses.has(courseId)) {
+                        selectedCourses.delete(courseId);
+                        updateBatchSelection();
+                    }
+                }, 300);
+                
+                showToast('课程已删除');
+            }
+            
+            closeDeleteConfirmModal();
+        }
+        
+        // 批量删除所选课程
+        function batchDeleteCourses() {
+            addButtonPressEffect(batchDeleteBtn);
+            
+            if (selectedCourses.size === 0) return;
+            
+            // 收集所有要删除的课程
+            const coursesToDelete = Array.from(selectedCourses).map(id => 
+                document.querySelector(`[data-course-id="${id}"]`)
+            ).filter(Boolean);
+            
+            // 对每个课程应用删除动画
+            coursesToDelete.forEach(course => {
+                course.classList.add('opacity-0', 'transform', 'scale-95');
+                
+                setTimeout(() => {
+                    const dayContainer = course.closest('.day-card');
+                    const dayId = dayContainer.getAttribute('data-day');
+                    const coursesContainer = document.getElementById(`day-${dayId}-courses`);
+                    
+                    course.remove();
+                    
+                    const remainingCourses = coursesContainer.querySelectorAll('.course-card').length;
+                    if (remainingCourses === 0) {
+                        coursesContainer.innerHTML = `
+                            <div class="flex flex-col items-center justify-center h-full p-6">
+                                <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                                    <i class="fa fa-plus text-gray-400"></i>
+                                </div>
+                                <p class="text-gray-500 text-sm">今天没有课程</p>
+                            </div>
+                        `;
+                    }
+                }, 300);
+            });
+            
+            // 清空选择并退出批量模式
+            selectedCourses.clear();
+            exitBatchMode();
+            showToast(`已删除 ${coursesToDelete.length} 门课程`);
+        }
+        
+        // 切换批量编辑模式
+        function toggleBatchMode() {
+            addButtonPressEffect(batchEditToggle);
+            
+            batchMode = !batchMode;
+            
+            if (batchMode) {
+                enterBatchMode();
+            } else {
+                exitBatchMode();
+            }
+        }
+        
+        // 进入批量编辑模式
+        function enterBatchMode() {
+            batchMode = true;
+            batchModeIndicator.classList.add('active');
+            batchEditToggle.innerHTML = '<i class="fa fa-times"></i>';
+            
+            // 为所有课程卡片添加选择事件
+            document.querySelectorAll('.course-card').forEach(card => {
+                card.addEventListener('click', handleCourseSelect);
+            });
+            
+            updateBatchSelection();
+        }
+        
+        // 退出批量编辑模式
+        function exitBatchMode() {
+            batchMode = false;
+            batchModeIndicator.classList.remove('active');
+            batchEditToggle.innerHTML = '<i class="fa fa-check-square-o"></i>';
+            
+            // 移除选择事件
+            document.querySelectorAll('.course-card').forEach(card => {
+                card.removeEventListener('click', handleCourseSelect);
+                card.classList.remove('selected');
+            });
+            
+            selectedCourses.clear();
+        }
+        
+        // 处理课程选择
+        function handleCourseSelect(e) {
+            if (!batchMode) return;
+            
+            e.stopPropagation();
+            const courseId = this.getAttribute('data-course-id');
+            
+            if (selectedCourses.has(courseId)) {
+                selectedCourses.delete(courseId);
+                this.classList.remove('selected');
+            } else {
+                selectedCourses.add(courseId);
+                this.classList.add('selected');
+            }
+            
+            updateBatchSelection();
+        }
+        
+        // 更新批量选择状态
+        function updateBatchSelection() {
+            selectedCountEl.textContent = selectedCourses.size;
+        }
+        
+        // 绑定课程操作事件
+        function bindCourseActions(element) {
+            const editButtons = element ? 
+                element.querySelectorAll('.edit-course') : 
+                document.querySelectorAll('.edit-course');
+                
+            const deleteButtons = element ? 
+                element.querySelectorAll('.delete-course') : 
+                document.querySelectorAll('.delete-course');
+            
+            // 编辑课程按钮
+            editButtons.forEach(button => {
+                button.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    addButtonPressEffect(button);
+                    const courseId = button.getAttribute('data-course-id');
+                    openCourseEditModal(courseId);
+                });
+            });
+            
+            // 删除课程按钮
+            deleteButtons.forEach(button => {
+                button.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    addButtonPressEffect(button);
+                    const courseId = button.getAttribute('data-course-id');
+                    openDeleteConfirmModal(courseId);
+                });
+            });
+        }
+        
+        // 绑定滑动删除功能
+        function bindSwipeActions(element) {
+            const cards = element ? [element] : document.querySelectorAll('.course-card');
+            
+            cards.forEach(card => {
+                let startX = 0;
+                let currentX = 0;
+                let isDragging = false;
+                const deleteBtn = card.querySelector('.slide-delete-btn');
+                const courseId = card.getAttribute('data-course-id');
+                
+                // 触摸开始
+                card.addEventListener('touchstart', (e) => {
+                    if (batchMode) return;
+                    startX = e.touches[0].clientX;
+                    isDragging = true;
+                    card.style.transition = 'transform 0s';
+                });
+                
+                // 触摸移动
+                card.addEventListener('touchmove', (e) => {
+                    if (!isDragging || batchMode) return;
+                    currentX = e.touches[0].clientX;
+                    const diffX = currentX - startX;
+                    
+                    // 只允许向右滑动
+                    if (diffX < 0) {
+                        const translateX = Math.max(diffX, -48);
+                        card.style.transform = `translateX(${translateX}px)`;
+                        
+                        // 显示/隐藏删除按钮
+                        if (translateX < -24) {
+                            deleteBtn.style.transform = 'translateX(0)';
+                        } else {
+                            deleteBtn.style.transform = 'translateX(100%)';
+                        }
+                    }
+                });
+                
+                // 触摸结束
+                card.addEventListener('touchend', (e) => {
+                    if (!isDragging || batchMode) return;
+                    isDragging = false;
+                    card.style.transition = 'transform 0.3s';
+                    
+                    const diffX = currentX - startX;
+                    
+                    // 如果滑动超过一半，完全显示删除按钮
+                    if (diffX < -24) {
+                        card.style.transform = 'translateX(-48px)';
+                        deleteBtn.style.transform = 'translateX(0)';
+                    } else {
+                        // 否则回弹
+                        card.style.transform = 'translateX(0)';
+                        deleteBtn.style.transform = 'translateX(100%)';
+                    }
+                });
+                
+                // 点击删除按钮
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    addButtonPressEffect(deleteBtn);
+                    openDeleteConfirmModal(courseId);
+                    
+                    // 重置卡片位置
+                    card.style.transform = 'translateX(0)';
+                    deleteBtn.style.transform = 'translateX(100%)';
+                });
+                
+                // 点击卡片其他区域重置位置
+                card.addEventListener('click', () => {
+                    if (batchMode) return;
+                    card.style.transform = 'translateX(0)';
+                    deleteBtn.style.transform = 'translateX(100%)';
+                });
+            });
+        }
+        
+        // 绑定长按事件
+        function bindLongPressActions(element) {
+            const cards = element ? [element] : document.querySelectorAll('.course-card');
+            
+            cards.forEach(card => {
+                let pressTimer = null;
+                const courseId = card.getAttribute('data-course-id');
+                
+                // 开始长按
+                card.addEventListener('touchstart', () => {
+                    if (batchMode) return;
+                    pressTimer = setTimeout(() => {
+                        // 长按超过500ms显示操作菜单
+                        const actionMenu = document.createElement('div');
+                        actionMenu.className = 'fixed z-50 bg-white rounded-lg shadow-xl p-1.5';
+                        actionMenu.innerHTML = `
+                            <div class="flex flex-col">
+                                <button class="longpress-edit px-3 py-1.5 text-left text-primary text-sm">
+                                    <i class="fa fa-pencil mr-1.5"></i>编辑课程
+                                </button>
+                                <button class="longpress-delete px-3 py-1.5 text-left text-danger text-sm">
+                                    <i class="fa fa-trash mr-1.5"></i>删除课程
+                                </button>
+                            </div>
+                        `;
+                        
+                        document.body.appendChild(actionMenu);
+                        
+                        // 定位在长按元素上方
+                        const rect = card.getBoundingClientRect();
+                        actionMenu.style.top = `${rect.top - actionMenu.offsetHeight - 8}px`;
+                        actionMenu.style.left = `${rect.left}px`;
+                        
+                        // 编辑按钮事件
+                        actionMenu.querySelector('.longpress-edit').addEventListener('click', () => {
+                            addButtonPressEffect(actionMenu.querySelector('.longpress-edit'));
+                            openCourseEditModal(courseId);
+                            document.body.removeChild(actionMenu);
+                        });
+                        
+                        // 删除按钮事件
+                        actionMenu.querySelector('.longpress-delete').addEventListener('click', () => {
+                            addButtonPressEffect(actionMenu.querySelector('.longpress-delete'));
+                            openDeleteConfirmModal(courseId);
+                            document.body.removeChild(actionMenu);
+                        });
+                        
+                        // 点击其他区域关闭菜单
+                        const closeMenu = (e) => {
+                            if (!actionMenu.contains(e.target) && e.target !== card) {
+                                document.body.removeChild(actionMenu);
+                                document.removeEventListener('click', closeMenu);
+                            }
+                        };
+                        
+                        document.addEventListener('click', closeMenu);
+                    }, 500);
+                });
+                
+                // 结束长按
+                card.addEventListener('touchend', () => {
+                    clearTimeout(pressTimer);
+                });
+                
+                // 移动时取消长按
+                card.addEventListener('touchmove', () => {
+                    clearTimeout(pressTimer);
+                });
+            });
+        }
+        
+        // 初始化事件绑定
+        function initEventListeners() {
+            // 使用事件委托处理动态创建的元素
+            document.addEventListener('click', function(e) {
+                // 关闭课程编辑弹窗
+                if (e.target.closest('.close-course-modal')) {
+                    addButtonPressEffect(e.target.closest('.close-course-modal'));
+                    closeCourseEditModal();
+                }
+                
+                // 取消课程编辑
+                if (e.target.closest('.cancel-course-edit')) {
+                    addButtonPressEffect(e.target.closest('.cancel-course-edit'));
+                    closeCourseEditModal();
+                }
+                
+                // 日期指示器点击
+                if (e.target.closest('.day-indicator')) {
+                    const indicator = e.target.closest('.day-indicator');
+                    const index = parseInt(indicator.getAttribute('data-day'));
+                    if (!isNaN(index)) {
+                        currentDay = index;
+                        updateDayDisplay();
+                    }
+                }
+            });
+            
+            // 日期滑动切换
+            let startX = 0;
+            let isDragging = false;
+            
+            daysContainer.addEventListener('touchstart', (e) => {
+                startX = e.touches[0].clientX;
+                isDragging = true;
+            });
+            
+            daysContainer.addEventListener('touchend', (e) => {
+                if (!isDragging) return;
+                
+                const endX = e.changedTouches[0].clientX;
+                const diffX = endX - startX;
+                
+                if (diffX > 30) {
+                    currentDay = (currentDay - 1 + totalDays) % totalDays;
+                } else if (diffX < -30) {
+                    currentDay = (currentDay + 1) % totalDays;
+                }
+                
+                updateDayDisplay();
+                isDragging = false;
+            });
+            
+            // 导航切换
+            navTimetable.addEventListener('click', () => {
+                addButtonPressEffect(navTimetable);
+                timetablePage.classList.remove('hidden');
+                aboutPage.classList.add('hidden');
+                navTimetable.classList.add('text-primary');
+                navTimetable.classList.remove('text-gray-500');
+                navAbout.classList.add('text-gray-500');
+                navAbout.classList.remove('text-primary');
+            });
+            
+            navAbout.addEventListener('click', () => {
+                addButtonPressEffect(navAbout);
+                timetablePage.classList.add('hidden');
+                aboutPage.classList.remove('hidden');
+                navAbout.classList.add('text-primary');
+                navAbout.classList.remove('text-gray-500');
+                navTimetable.classList.add('text-gray-500');
+                navTimetable.classList.remove('text-primary');
+            });
+            
+            backFromAbout.addEventListener('click', () => {
+                addButtonPressEffect(backFromAbout);
+                timetablePage.classList.remove('hidden');
+                aboutPage.classList.add('hidden');
+                navTimetable.classList.add('text-primary');
+                navTimetable.classList.remove('text-gray-500');
+                navAbout.classList.add('text-gray-500');
+                navAbout.classList.remove('text-primary');
+            });
+            
+            // 添加课程按钮
+            addCourseBtn.addEventListener('click', () => {
+                addButtonPressEffect(addCourseBtn);
+                openCourseEditModal();
+            });
+            
+            quickAddCourseBtn.addEventListener('click', () => {
+                addButtonPressEffect(quickAddCourseBtn);
+                openCourseEditModal();
+            });
+            
+            // 批量编辑模式
+            batchEditToggle.addEventListener('click', toggleBatchMode);
+            batchDeleteBtn.addEventListener('click', batchDeleteCourses);
+            exitBatchModeBtn.addEventListener('click', () => {
+                addButtonPressEffect(exitBatchModeBtn);
+                exitBatchMode();
+            });
+            
+            // 编辑课程名称相关事件
+            editSubjectsBtn.addEventListener('click', () => {
+                addButtonPressEffect(editSubjectsBtn);
+                openEditModal();
+            });
+            
+            closeModalBtn.addEventListener('click', () => {
+                addButtonPressEffect(closeModalBtn);
+                closeEditModal();
+            });
+            
+            cancelEditBtn.addEventListener('click', () => {
+                addButtonPressEffect(cancelEditBtn);
+                closeEditModal();
+            });
+            
+            saveEditBtn.addEventListener('click', saveSubjectNames);
+            
+            editSubjectsModal.addEventListener('click', (e) => {
+                if (e.target === editSubjectsModal) {
+                    closeEditModal();
+                }
+            });
+            
+            // 课程编辑弹窗相关事件
+            editCourseModal.addEventListener('click', (e) => {
+                if (e.target === editCourseModal) {
+                    closeCourseEditModal();
+                }
+            });
+            
+            saveCourseEditBtn.addEventListener('click', saveCourseEdit);
+            
+            // 删除确认弹窗相关事件
+            cancelDeleteBtn.addEventListener('click', () => {
+                addButtonPressEffect(cancelDeleteBtn);
+                closeDeleteConfirmModal();
+            });
+            
+            confirmDeleteBtn.addEventListener('click', confirmDeleteCourse);
+            
+            deleteConfirmModal.addEventListener('click', (e) => {
+                if (e.target === deleteConfirmModal) {
+                    closeDeleteConfirmModal();
+                }
+            });
+        }
+        
+        // 初始化
+        function init() {
+            // 绑定各种交互事件
+            bindCourseActions();
+            bindSwipeActions();
+            bindLongPressActions();
+            initEventListeners();
+            
+            // 初始化显示当前日期
+            const today = new Date().getDay();
+            currentDay = today === 0 ? 6 : today - 1;
+            updateDayDisplay();
+            updateSubjectNames();
+        }
+        
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
+    
